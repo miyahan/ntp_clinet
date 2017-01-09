@@ -10,7 +10,6 @@ from socket import SOCK_DGRAM
 from socket import socket
 from struct import pack
 from struct import unpack
-from time import time
 
 
 class NtpClient(object):
@@ -72,12 +71,11 @@ class NtpClient(object):
         )
 
         """send request to NTP server."""
-        start_ts = time()
+        self.local_transmit_ts = datetime.now()
         with socket(AF_INET, SOCK_DGRAM) as s:
             s.sendto(ref_ts, (server, port))
             response = s.recvfrom(1024)[0]
-        delay = time() - start_ts
-        self.local_ts = datetime.now()
+        self.local_recieve_ts = datetime.now()
 
         """parse response."""
         if response:
@@ -101,17 +99,17 @@ class NtpClient(object):
             self.originate_ts = self._ntptime2datetime(unpk[9], unpk[10])
             self.receive_ts = self._ntptime2datetime(unpk[11], unpk[12])
             self.transmit_ts = self._ntptime2datetime(unpk[13], unpk[14])
-            self.delay = delay
-            self.offset = (self.local_ts - self.transmit_ts).total_seconds()
+            self.rtt = (self.local_recieve_ts - self.local_transmit_ts).total_seconds() - (self.transmit_ts - self.receive_ts).total_seconds()
+            self.offset = ((self.transmit_ts - self.local_recieve_ts).total_seconds() + (self.receive_ts - self.local_transmit_ts).total_seconds()) * 0.5
         else:
             None
 
 
 if __name__ == '__main__':
     ntp = NtpClient('ntp.nict.jp')
-    print('NTP: {}\nLOC: {} (delay: {:.0f}ms, offset: {:.0f}ms)'.format(
-        ntp.local_ts,
+    print('NTP: {}\nLOC: {} (rtt: {:.0f}ms, offset: {:.0f}ms)'.format(
+        ntp.local_transmit_ts,
         ntp.transmit_ts,
-        ntp.delay * 1000,
+        ntp.rtt * 1000,
         ntp.offset * 1000
     ))
